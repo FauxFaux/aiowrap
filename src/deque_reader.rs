@@ -6,8 +6,8 @@ use futures::io::Error;
 use futures::ready;
 use futures::task::Context;
 use futures::task::Poll;
-use futures::AsyncReadExt;
-use futures::{AsyncBufRead, AsyncRead};
+use futures::AsyncBufRead;
+use futures::AsyncRead;
 use pin_project_lite::pin_project;
 use slice_deque::SliceDeque;
 
@@ -20,19 +20,19 @@ pin_project! {
 }
 
 impl<R: AsyncRead> DequeReader<R> {
-    fn new(inner: R) -> DequeReader<R> {
+    pub fn new(inner: R) -> DequeReader<R> {
         Self::with_capacity(inner, 0)
     }
 
-    fn with_capacity(inner: R, n: usize) -> DequeReader<R> {
+    pub fn with_capacity(inner: R, n: usize) -> DequeReader<R> {
         DequeReader {
             inner,
             buf: SliceDeque::with_capacity(n),
         }
     }
 
-    fn poll_read_more(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        let mut this = self.project();
+    pub fn poll_read_more(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        let this = self.project();
         let mut buf = [0u8; 4096];
         let found = ready!(this.inner.poll_read(cx, &mut buf));
         let found = match found {
@@ -42,6 +42,10 @@ impl<R: AsyncRead> DequeReader<R> {
         let buf = &buf[..found];
         this.buf.extend_from_slice(&buf);
         Poll::Ready(Ok(()))
+    }
+
+    pub fn buffer(&self) -> &[u8] {
+        self.buf.as_slice()
     }
 }
 
