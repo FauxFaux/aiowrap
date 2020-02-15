@@ -12,6 +12,28 @@ use pin_project_lite::pin_project;
 use slice_deque::SliceDeque;
 
 pin_project! {
+    /// An interface like `io::BufReader`, but extra data can be *repeatedly* added.
+    ///
+    /// ```
+    /// # use std::pin::Pin;
+    /// # use async_std::task;
+    /// # use futures::io;
+    /// # use futures::io::AsyncBufRead as _;
+    /// # use aiowrap::DequeReader;
+    /// # async_std::task::block_on(async {
+    /// let mut m = DequeReader::new(io::Cursor::new(b"hello world"));
+    /// // gather more and more data
+    /// while m.read_more().await.expect("no io errors") {
+    ///     // until we find an 'r'
+    ///     if let Some(r) = m.buffer().iter().position(|&c| c == b'r') {
+    ///         // then discard everything up to that point
+    ///         Pin::new(&mut m).consume(r);
+    ///         return;
+    ///     }
+    /// }
+    /// panic!("reached eof")
+    /// # });
+    /// ```
     pub struct DequeReader<R> {
         #[pin]
         inner: R,
@@ -20,10 +42,15 @@ pin_project! {
 }
 
 impl<R> DequeReader<R> {
+    /// Wrap a reader, without allocating a buffer. The buffer will be allocated, and grown, on use.
     pub fn new(inner: R) -> DequeReader<R> {
         Self::with_capacity(inner, 0)
     }
 
+    /// Wrap a reader, pre-allocating a buffer of a specific size. The buffer will be grown on use.
+    ///
+    /// Note: [SliceDeque] has stringent, platform dependent rules
+    /// around the buffer size, so the resulting buffer size may be wildly different.
     pub fn with_capacity(inner: R, n: usize) -> DequeReader<R> {
         DequeReader {
             inner,
@@ -33,6 +60,9 @@ impl<R> DequeReader<R> {
 }
 
 impl<R: AsyncRead> DequeReader<R> {
+    /// Attempt a large read against the `inner` reader.
+    ///
+    /// If a byte could not be read as we are at the end of the stream, return `false`.
     pub fn poll_read_more(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<bool>> {
         let this = self.project();
         let mut buf = [0u8; 4096];
@@ -52,6 +82,8 @@ impl<R: AsyncRead> DequeReader<R> {
 }
 
 impl<R: Unpin + AsyncRead> DequeReader<R> {
+    /// Resolves when we can read at least one extra byte into the inner reader,
+    /// typically many more, returning `true` until we are at eof.
     pub async fn read_more(&mut self) -> io::Result<bool> {
         poll_fn(|cx| Pin::new(&mut *self).poll_read_more(cx)).await
     }

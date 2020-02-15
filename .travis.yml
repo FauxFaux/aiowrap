@@ -1,0 +1,12 @@
+os: linux
+dist: bionic
+
+language: rust
+rust:
+  - nightly
+  - beta
+  - stable
+
+jobs:
+  allow_failures:
+    - rust: nightly

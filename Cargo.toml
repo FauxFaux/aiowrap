@@ -4,6 +4,12 @@ version = "0.1.0"
 authors = ["Chris West (Faux) <git@goeswhere.com>"]
 edition = "2018"
 
+description = "Small helpers for using AsyncRead/AsyncWrite"
+repository = "https://github.com/FauxFaux/aiowrap"
+readme = "README.md"
+categories = ["data-structures"]
+license = "MIT OR Apache-2.0"
+
 [dependencies]
 futures = "0.3"
 pin-project-lite = "0.1"
