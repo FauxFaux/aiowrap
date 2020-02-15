@@ -31,7 +31,7 @@ impl<R: AsyncRead> DequeReader<R> {
         }
     }
 
-    pub fn poll_read_more(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+    pub fn poll_read_more(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<bool>> {
         let this = self.project();
         let mut buf = [0u8; 4096];
         let found = ready!(this.inner.poll_read(cx, &mut buf));
@@ -41,7 +41,7 @@ impl<R: AsyncRead> DequeReader<R> {
         };
         let buf = &buf[..found];
         this.buf.extend_from_slice(&buf);
-        Poll::Ready(Ok(()))
+        Poll::Ready(Ok(!buf.is_empty()))
     }
 
     pub fn buffer(&self) -> &[u8] {
@@ -50,7 +50,7 @@ impl<R: AsyncRead> DequeReader<R> {
 }
 
 impl<R: Unpin + AsyncRead> DequeReader<R> {
-    pub async fn read_more(&mut self) -> io::Result<()> {
+    pub async fn read_more(&mut self) -> io::Result<bool> {
         poll_fn(|cx| Pin::new(&mut *self).poll_read_more(cx)).await
     }
 }
@@ -71,7 +71,7 @@ impl<R: AsyncRead> AsyncRead for DequeReader<R> {
                 return this.inner.poll_read(cx, buf);
             }
 
-            let () = ready!(self.as_mut().poll_read_more(cx)?);
+            let _any_more = ready!(self.as_mut().poll_read_more(cx)?);
         }
 
         let using = self.buf.len().min(buf.len());
@@ -90,7 +90,7 @@ impl<R: AsyncRead> AsyncBufRead for DequeReader<R> {
         cx: &mut Context<'_>,
     ) -> Poll<Result<&'a [u8], Error>> {
         if self.buf.is_empty() {
-            let () = ready!(self.as_mut().poll_read_more(cx))?;
+            let _any_more = ready!(self.as_mut().poll_read_more(cx))?;
         }
         let this = self.project();
         Poll::Ready(Ok(this.buf.as_slice()))
@@ -99,5 +99,48 @@ impl<R: AsyncRead> AsyncBufRead for DequeReader<R> {
     fn consume(self: Pin<&mut Self>, amt: usize) {
         let this = self.project();
         this.buf.drain(..amt);
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::pin::Pin;
+
+    use async_std::task;
+    use futures::io;
+    use futures::io::AsyncBufRead;
+
+    use crate::DequeReader;
+    use crate::ShortRead;
+
+    #[test]
+    fn buf_read() {
+        task::block_on(async {
+            let mut m = DequeReader::new(ShortRead::new(
+                io::Cursor::new(b"hello world"),
+                vec![2, 3, 4, 5].into_iter(),
+            ));
+            assert_eq!(b"", m.buffer());
+            assert_eq!(true, m.read_more().await.unwrap());
+            assert_eq!(b"he", m.buffer());
+            assert_eq!(true, m.read_more().await.unwrap());
+            assert_eq!(b"hello", m.buffer());
+
+            Pin::new(&mut m).consume(2);
+            assert_eq!(b"llo", m.buffer());
+
+            assert_eq!(true, m.read_more().await.unwrap());
+            assert_eq!(b"llo wor", m.buffer());
+
+            Pin::new(&mut m).consume(1);
+            assert_eq!(b"lo wor", m.buffer());
+
+            assert_eq!(true, m.read_more().await.unwrap());
+            assert_eq!(b"lo world", m.buffer());
+
+            assert_eq!(false, m.read_more().await.unwrap());
+            assert_eq!(b"lo world", m.buffer());
+            assert_eq!(false, m.read_more().await.unwrap());
+        });
     }
 }
