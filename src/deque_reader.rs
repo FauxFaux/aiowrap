@@ -51,7 +51,7 @@ impl<R: Unpin + AsyncRead> DequeReader<R> {
     }
 }
 
-impl<R: Unpin + AsyncRead> AsyncRead for DequeReader<R> {
+impl<R: AsyncRead> AsyncRead for DequeReader<R> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -67,18 +67,20 @@ impl<R: Unpin + AsyncRead> AsyncRead for DequeReader<R> {
                 return this.inner.poll_read(cx, buf);
             }
 
-            let () = ready!(Pin::new(&mut *self).poll_read_more(cx)?);
+            let () = ready!(self.as_mut().poll_read_more(cx)?);
         }
 
         let using = self.buf.len().min(buf.len());
         buf[..using].copy_from_slice(&self.buf.as_slice()[..using]);
-        self.buf.drain(..using);
+
+        let this = self.project();
+        this.buf.drain(..using);
 
         Poll::Ready(Ok(using))
     }
 }
 
-impl<R: Unpin + AsyncRead> AsyncBufRead for DequeReader<R> {
+impl<R: AsyncRead> AsyncBufRead for DequeReader<R> {
     fn poll_fill_buf<'a>(
         mut self: Pin<&'a mut Self>,
         cx: &mut Context<'_>,
@@ -86,10 +88,12 @@ impl<R: Unpin + AsyncRead> AsyncBufRead for DequeReader<R> {
         if self.buf.is_empty() {
             let () = ready!(self.as_mut().poll_read_more(cx))?;
         }
-        Poll::Ready(Ok(self.get_mut().buf.as_slice()))
+        let this = self.project();
+        Poll::Ready(Ok(this.buf.as_slice()))
     }
 
     fn consume(self: Pin<&mut Self>, amt: usize) {
-        self.get_mut().buf.drain(..amt);
+        let this = self.project();
+        this.buf.drain(..amt);
     }
 }
