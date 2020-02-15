@@ -76,6 +76,7 @@ impl<R: AsyncRead> DequeReader<R> {
         Poll::Ready(Ok(!buf.is_empty()))
     }
 
+    /// Access the inner buffer directly, without attempting any reads.
     pub fn buffer(&self) -> &[u8] {
         self.buf.as_slice()
     }
@@ -85,6 +86,7 @@ impl<R: Unpin + AsyncRead> DequeReader<R> {
     /// Resolves when we can read at least one extra byte into the inner reader,
     /// typically many more, returning `true` until we are at eof.
     pub async fn read_more(&mut self) -> io::Result<bool> {
+        // surely there's a more elegant way to write this
         poll_fn(|cx| Pin::new(&mut *self).poll_read_more(cx)).await
     }
 }
