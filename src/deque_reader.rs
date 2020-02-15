@@ -19,7 +19,7 @@ pin_project! {
     }
 }
 
-impl<R: AsyncRead> DequeReader<R> {
+impl<R> DequeReader<R> {
     pub fn new(inner: R) -> DequeReader<R> {
         Self::with_capacity(inner, 0)
     }
@@ -30,7 +30,9 @@ impl<R: AsyncRead> DequeReader<R> {
             buf: SliceDeque::with_capacity(n),
         }
     }
+}
 
+impl<R: AsyncRead> DequeReader<R> {
     pub fn poll_read_more(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<bool>> {
         let this = self.project();
         let mut buf = [0u8; 4096];
