@@ -2,12 +2,13 @@ use std::io;
 use std::pin::Pin;
 
 use futures::future::poll_fn;
-use futures::io::Error;
+use futures::io::IoSlice;
 use futures::ready;
 use futures::task::Context;
 use futures::task::Poll;
 use futures::AsyncBufRead;
 use futures::AsyncRead;
+use futures::AsyncWrite;
 use pin_project_lite::pin_project;
 use slice_deque::SliceDeque;
 
@@ -152,7 +153,7 @@ impl<R: AsyncRead> AsyncBufRead for DequeReader<R> {
     fn poll_fill_buf<'a>(
         mut self: Pin<&'a mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<&'a [u8], Error>> {
+    ) -> Poll<io::Result<&'a [u8]>> {
         if self.buf.is_empty() {
             let _any_more = ready!(self.as_mut().poll_read_more(cx))?;
         }
@@ -163,6 +164,32 @@ impl<R: AsyncRead> AsyncBufRead for DequeReader<R> {
     fn consume(self: Pin<&mut Self>, amt: usize) {
         let this = self.project();
         this.buf.drain(..amt);
+    }
+}
+
+impl<W: AsyncWrite> AsyncWrite for DequeReader<W> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        self.project().inner.poll_write(cx, buf)
+    }
+
+    fn poll_write_vectored(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[IoSlice<'_>],
+    ) -> Poll<io::Result<usize>> {
+        self.project().inner.poll_write_vectored(cx, bufs)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.project().inner.poll_flush(cx)
+    }
+
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.project().inner.poll_close(cx)
     }
 }
 
