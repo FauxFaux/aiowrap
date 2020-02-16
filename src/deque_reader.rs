@@ -57,6 +57,34 @@ impl<R> DequeReader<R> {
             buf: SliceDeque::with_capacity(n),
         }
     }
+
+    /// Gets a reference to the underlying reader.
+    ///
+    /// It is inadvisable to directly read from the underlying reader.
+    pub fn get_ref(&self) -> &R {
+        &self.inner
+    }
+
+    /// Gets a mutable reference to the underlying reader.
+    ///
+    /// It is inadvisable to directly read from the underlying reader.
+    pub fn get_mut(&mut self) -> &mut R {
+        &mut self.inner
+    }
+
+    /// Gets a pinned mutable reference to the underlying reader.
+    ///
+    /// It is inadvisable to directly read from the underlying reader.
+    pub fn get_pin_mut(self: Pin<&mut Self>) -> Pin<&mut R> {
+        self.project().inner
+    }
+
+    /// Consumes this, returning the underlying reader.
+    ///
+    /// Note that any leftover data in the internal buffer is lost.
+    pub fn into_inner(self) -> R {
+        self.inner
+    }
 }
 
 impl<R: AsyncRead> DequeReader<R> {
