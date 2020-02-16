@@ -10,6 +10,9 @@ readme = "README.md"
 categories = ["data-structures"]
 license = "MIT OR Apache-2.0"
 
+[badges.travis-ci]
+repository = "FauxFaux/aiowrap"
+
 [dependencies]
 futures = "0.3"
 pin-project-lite = "0.1"
